@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # 上传配置
     upload_dir: str = "uploads"
 
+    # Agent 配置
+    agent_timeout: int = 30
+    max_retries: int = 2
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

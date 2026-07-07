@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 
 # ── 应用创建 ─────────────────────────────────────────────
 app = FastAPI(
-    title="Multi-Agent Job Copilot",
-    description="基于 LLM 的多 Agent 智能求职助手 API",
-    version="0.1.0",
+    title="Agentic Career Copilot",
+    description="基于 LangGraph 的多 Agent 智能职业助手 API",
+    version="0.2.0",
 )
 
 # ── CORS 配置（允许前端跨域访问）────────────────────────
@@ -40,8 +40,9 @@ app.include_router(resume_router)
 @app.get("/")
 async def root():
     return {
-        "app": "Multi-Agent Job Copilot",
-        "version": "0.1.0",
+        "app": "Agentic Career Copilot",
+        "version": "0.2.0",
+        "agents": ["resume", "job", "match", "interview"],
         "docs": "/docs",
     }
 
