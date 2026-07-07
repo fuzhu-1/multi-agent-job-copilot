@@ -5,11 +5,13 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.resume import router as resume_router
 from app.api.rag import router as rag_router
 from app.api.chat import router as chat_router
 from app.config import settings
+from app.utils.request_id import generate_request_id, set_request_id
 
 # ── 日志配置 ─────────────────────────────────────────────
 logging.basicConfig(
@@ -33,6 +35,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── 请求 ID 中间件 ────────────────────────────────────────
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        rid = generate_request_id()
+        set_request_id(rid)
+        logger.info("[%s] %s %s", rid, request.method, request.url.path)
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = rid
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
 
 # ── 注册路由 ─────────────────────────────────────────────
 app.include_router(resume_router)

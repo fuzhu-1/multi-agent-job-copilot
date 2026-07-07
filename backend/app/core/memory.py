@@ -43,12 +43,12 @@ class SessionMemory:
         with self._get_lock(session_id):
             history = self.get_history(session_id)
             history.append({
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now().isoformat(),
-        })
-        with open(self._session_path(session_id), "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
+                "role": role,
+                "content": content,
+                "timestamp": datetime.now().isoformat(),
+            })
+            with open(self._session_path(session_id), "w", encoding="utf-8") as f:
+                json.dump(history, f, ensure_ascii=False, indent=2)
 
     def clear(self, session_id: str):
         """清除对话历史"""
