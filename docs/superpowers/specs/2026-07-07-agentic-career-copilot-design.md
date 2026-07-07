@@ -293,9 +293,11 @@ agentic-career-copilot/
 | 4 | LangGraph 工作流 + Orchestrator | ~500 行 |
 | 5 | Memory + Streaming | ~400 行 |
 | 6 | Tool Calling 完善 | ~300 行 |
-| 7 | Next.js 前端 | ~800 行 |
-| 8 | Docker + GitHub Actions | ~200 行 |
-| 9 | README + 架构图 + Demo | ~200 行 |
+| 7 | 可观测性 + 超时 + 重试机制 | ~300 行 |
+| 8 | 测试策略（单元 + 集成） | ~400 行 |
+| 9 | Next.js 前端 | ~800 行 |
+| 10 | Docker + GitHub Actions | ~200 行 |
+| 11 | README + ARCHITECTURE.md + 架构图 + Demo | ~300 行 |
 
 ---
 
@@ -311,7 +313,140 @@ agentic-career-copilot/
 
 ---
 
-## 12. 后续扩展
+## 12. 工程化设计
+
+### 12.1 错误重试与 Fallback 机制
+
+LLM 调用可能因 API 超时、rate limit 等原因失败，设计多层容错：
+
+```python
+# 重试装饰器
+def with_retry(max_retries=2, fallback_return=None):
+    """Tool 调用重试装饰器
+    - 指数退避等待（1s, 2s）
+    - 失败后返回 fallback 而非抛 500
+    - 记录重试日志
+    """
+
+# Fallback 策略
+# - LLM 调用失败 → 返回缓存结果 / 简化版规则引擎结果
+# - PDF 解析失败 → 返回友好错误提示
+# - RAG 检索失败 → 返回空结果而非中断流程
+```
+
+**面试亮点**：说明"容错设计不是防御式编程，而是生产环境 LLM 应用的必修课"。
+
+### 12.2 Agent 调用链可观测性
+
+LangGraph 原生支持 callbacks，但需要主动接入：
+
+```python
+class AgentTracingCallback(BaseCallbackHandler):
+    """追踪每个 Agent 调用的耗时、token 消耗、调用链"""
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        request_id = get_current_request_id()
+        logger.info(f"[{request_id}] LLM call started: {prompts[0][:50]}...")
+
+    def on_llm_end(self, response, **kwargs):
+        tokens = response.llm_output.get("token_usage", {})
+        logger.info(f"[{request_id}] LLM done: {tokens}")
+```
+
+记录维度：
+- 每次 LLM 调用的耗时和 token 数
+- Agent 路由路径（Orchestrator → Resume → Match）
+- 异常和重试事件
+
+**面试亮点**："面试官，我可以展开讲怎么用 OpenTelemetry + LangSmith 做分布式追踪"。
+
+### 12.3 请求 ID 追踪
+
+```
+POST /chat → 生成 request_id (uuid)
+               │
+               ↓ 贯穿所有日志
+[req_abc123] Orchestrator: intent=resume
+[req_abc123] Resume Agent: parse_pdf start
+[req_abc123] Resume Agent: LLM analyze done (tokens=456)
+[req_abc123] Response: stream completed (duration=3.2s)
+```
+
+实现方式：`contextvars` 在请求上下文中传递 request_id，日志格式化器自动注入。
+
+### 12.4 Agent 超时控制
+
+```python
+async def run_agent_with_timeout(agent_call, timeout_seconds=30):
+    """每个 Agent 执行加超时，避免单点卡死整体"""
+    try:
+        return await asyncio.wait_for(agent_call, timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        logger.warning(f"Agent timed out after {timeout_seconds}s")
+        return {"error": "处理超时，请重试", "partial_result": ...}
+```
+
+| Agent | 超时时间 |
+|-------|---------|
+| Resume | 30s |
+| Job | 30s |
+| Match | 20s |
+| Interview | 40s |
+| RAG 检索 | 10s |
+
+### 12.5 配置分层
+
+```
+config/
+├── settings.py       # 环境变量 + 配置加载
+├── prompts/          # Agent Prompt 模板
+│   ├── resume.yaml
+│   ├── job.yaml
+│   ├── match.yaml
+│   └── interview.yaml
+└── agents.yaml       # Agent 参数：model、temperature、timeout
+```
+
+分离收益：
+- Prompt 变更无需改代码
+- 支持多模型切换（不同 Agent 可用不同模型）
+- 面试时可以展示"我做了配置与代码分离"
+
+### 12.6 测试策略
+
+```
+tests/
+├── unit/
+│   ├── test_pdf_parser.py      # PDF 解析测试
+│   ├── test_resume_tools.py    # 工具函数测试
+│   └── test_match_tools.py
+├── integration/
+│   ├── test_resume_agent.py    # Agent + LLM 集成测试
+│   ├── test_match_agent.py
+│   └── test_workflow.py        # LangGraph 工作流测试
+└── conftest.py                 # 共享 Fixture
+```
+
+- 单元测试：Mock LLM 调用，只测逻辑
+- 集成测试：使用 `pytest` + `httpx`，调用真实 API（可选开关）
+- CI 中 `pytest --cov=app --cov-report=term-missing` 检查覆盖率
+
+### 12.7 面试友好设计文档
+
+```
+docs/
+├── ARCHITECTURE.md     # 系统架构图 + 设计决策说明
+│                        # - 为什么选 Orchestrator 而非 Pipeline
+│                        # - 为什么 ChromaDB + bge-m3
+│                        # - 容错 / 可观测性设计思路
+├── api.md              # 接口文档
+└── superpowers/specs/  # 设计规格文档
+```
+
+**面试亮点**：文档能直接体现工程思维，面试官问"你碰到过什么技术挑战"时可以指着 ARCHITECTURE.md 说"我设计了多层容错和可观测性体系"。
+
+---
+
+## 13. 后续扩展
 
 - 长期记忆 (PostgreSQL)
 - MCP 协议支持
