@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from app.agents.match_agent import MatchAgent
 from app.agents.resume_agent import ResumeAgent
 from app.config import settings
 from app.models.schemas import (
@@ -15,13 +16,13 @@ from app.models.schemas import (
     MatchJobResponse,
     ResumeUploadResponse,
 )
-from app.services.analyzer import match_resume_with_jd
 from app.services.pdf_parser import extract_text_from_pdf, PDFParserError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="", tags=["resume"])
 
 resume_agent = ResumeAgent()
+match_agent = MatchAgent()
 
 
 @router.post("/upload_resume", response_model=ResumeUploadResponse)
@@ -75,8 +76,8 @@ async def match_job(request: MatchJobRequest) -> MatchJobResponse:
         raise HTTPException(status_code=400, detail="岗位描述不能为空")
 
     try:
-        result = match_resume_with_jd(request.resume_text, request.job_description)
-        return MatchJobResponse(**result)
+        result = match_agent.run(resume_text=request.resume_text, jd_text=request.job_description)
+        return result
     except Exception as e:
         logger.error("岗位匹配失败: %s", e)
         raise HTTPException(status_code=500, detail=f"岗位匹配失败: {e}")
