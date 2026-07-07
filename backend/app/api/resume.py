@@ -35,7 +35,11 @@ async def upload_resume(file: UploadFile) -> ResumeUploadResponse:
     upload_dir.mkdir(exist_ok=True)
 
     file_id = uuid.uuid4().hex[:8]
-    save_path = upload_dir / f"{file_id}_{file.filename}"
+    safe_filename = Path(file.filename).name  # strips directory components
+    save_path = (upload_dir / f"{file_id}_{safe_filename}").resolve()
+    upload_dir_resolved = Path(upload_dir).resolve()
+    if not str(save_path).startswith(str(upload_dir_resolved)):
+        raise HTTPException(status_code=400, detail="非法文件名")
 
     try:
         content = await file.read()
@@ -43,7 +47,7 @@ async def upload_resume(file: UploadFile) -> ResumeUploadResponse:
         logger.info("文件已保存: %s (%d bytes)", save_path, len(content))
     except Exception as e:
         logger.error("文件保存失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"文件保存失败: {e}")
+        raise HTTPException(status_code=500, detail="文件保存失败，请稍后重试")
 
     try:
         text = extract_text_from_pdf(save_path)
@@ -64,7 +68,7 @@ async def analyze_resume(request: AnalyzeResumeRequest) -> AnalyzeResumeResponse
         return result
     except Exception as e:
         logger.error("简历分析失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"简历分析失败: {e}")
+        raise HTTPException(status_code=500, detail="简历分析失败，请稍后重试")
 
 
 @router.post("/match_job", response_model=MatchJobResponse)
@@ -80,4 +84,4 @@ async def match_job(request: MatchJobRequest) -> MatchJobResponse:
         return result
     except Exception as e:
         logger.error("岗位匹配失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"岗位匹配失败: {e}")
+        raise HTTPException(status_code=500, detail="岗位匹配失败，请稍后重试")

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.resume import router as resume_router
+from app.api.rag import router as rag_router
 from app.config import settings
 
 # ── 日志配置 ─────────────────────────────────────────────
@@ -34,6 +35,7 @@ app.add_middleware(
 
 # ── 注册路由 ─────────────────────────────────────────────
 app.include_router(resume_router)
+app.include_router(rag_router)
 
 
 # ── 根路径 ───────────────────────────────────────────────
